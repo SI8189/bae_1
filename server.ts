@@ -14,10 +14,33 @@ app.use(express.json());
 
 // Set up Gemini Client lazily or at module load safely
 const getGeminiClient = (customApiKey?: string) => {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Gemini API Key가 비어있습니다. 우측 상단의 [API 설정] 버튼을 눌러 본인의 Gemini API Key를 등록해주시거나, 관리자 .env 설정을 확인해주세요.');
+  let apiKey = customApiKey || process.env.GEMINI_API_KEY;
+  
+  if (apiKey) {
+    apiKey = apiKey.trim();
+    
+    // Support copy-paste line: GEMINI_API_KEY="..." or similar
+    if (apiKey.includes("=")) {
+      const parts = apiKey.split("=");
+      apiKey = parts[parts.length - 1].trim();
+    }
+    
+    // Strip surrounding matching quotes
+    if ((apiKey.startsWith('"') && apiKey.endsWith('"')) || 
+        (apiKey.startsWith("'") && apiKey.endsWith("'"))) {
+      apiKey = apiKey.slice(1, -1).trim();
+    }
+    
+    // De-duplicate template credentials/placeholders
+    if (apiKey === "MY_GEMINI_API_KEY" || apiKey === "" || apiKey.includes("PLACEHOLDER")) {
+      apiKey = "";
+    }
   }
+
+  if (!apiKey) {
+    throw new Error('Gemini API Key가 설정되지 않았습니다. 우측 상단의 [API 설정] 버튼을 눌러 본인의 Gemini API Key(AIzaSy...)를 등록해주시거나, 서버 관리자 .env 설정을 확인해주세요.');
+  }
+
   return new GoogleGenAI({
     apiKey: apiKey,
     httpOptions: {
@@ -108,7 +131,24 @@ ${KOREAN_LABOR_STANDARDS_ACT}
     res.json({ text: response.text });
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    res.status(500).json({ error: error.message || "An error occurred while generating the response." });
+    let errorMessage = error.message || "답변 생성 중 알 수 없는 오류가 발생했습니다.";
+    
+    // Translate typical API-key failure states for a polished user experience
+    if (errorMessage.includes("API_KEY_INVALID") || 
+        errorMessage.includes("API key not valid") || 
+        errorMessage.includes("invalid API key") ||
+        errorMessage.includes("API key")) {
+      errorMessage = "입력하신 Gemini API Key가 올바르지 않거나 활성화되지 않았습니다. 우측 상단 [API 설정] 단추를 클릭해 AIzaSy로 시작하는 유효한 API Key를 복사해 올바르게 입력해 주십시오.";
+    } else if (errorMessage.toLowerCase().includes("quota") || 
+               errorMessage.toLowerCase().includes("limit") || 
+               errorMessage.includes("429")) {
+      errorMessage = "Gemini API 호출 한도를 초과했습니다(Quota Exceeded). 개인 API 키의 일일 사용 할당량을 확인하시거나 잠시 후에 다시 실행해 주십시오.";
+    } else if (errorMessage.toLowerCase().includes("blocked") || 
+               errorMessage.toLowerCase().includes("safety")) {
+      errorMessage = "안전 조항 위반 또는 적합하지 않은 부적절한 표현 감지로 인해 인공지능 답변 작성이 제한되었습니다.";
+    }
+
+    res.status(500).json({ error: errorMessage });
   }
 });
 

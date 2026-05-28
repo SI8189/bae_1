@@ -64,10 +64,23 @@ export default function App() {
   }, []);
 
   const handleSaveApiKey = (key: string) => {
-    const trimmed = key.trim();
-    setApiKey(trimmed);
-    if (trimmed) {
-      localStorage.setItem("USER_GEMINI_API_KEY", trimmed);
+    let cleaned = key.trim();
+    
+    // Support copy-paste line: GEMINI_API_KEY="..." or similar
+    if (cleaned.includes("=")) {
+      const parts = cleaned.split("=");
+      cleaned = parts[parts.length - 1].trim();
+    }
+    
+    // Strip surrounding matching quotes if present
+    if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
+        (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+
+    setApiKey(cleaned);
+    if (cleaned) {
+      localStorage.setItem("USER_GEMINI_API_KEY", cleaned);
     } else {
       localStorage.removeItem("USER_GEMINI_API_KEY");
     }
@@ -126,8 +139,20 @@ export default function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "서버와 통신하는 중 문제가 발생했습니다.");
+        let serverError = "";
+        try {
+          const errorData = await response.json().catch(() => ({}));
+          serverError = errorData.error;
+        } catch (e) {
+          // If response is not JSON, try reading as raw text
+          try {
+            const rawText = await response.text();
+            if (rawText && rawText.length < 200) {
+              serverError = rawText;
+            }
+          } catch (textErr) {}
+        }
+        throw new Error(serverError || "서버와 통신하는 중 문제가 발생했습니다.");
       }
 
       const data = await response.json();
