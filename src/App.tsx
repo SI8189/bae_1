@@ -55,12 +55,18 @@ export default function App() {
   const [activeStep, setActiveStep] = useState<string>("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [modalKeyInput, setModalKeyInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load API Key on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
     setApiKey(savedKey);
+    setModalKeyInput(savedKey);
+    if (!savedKey) {
+      setShowOnboardingModal(true);
+    }
   }, []);
 
   const handleSaveApiKey = (key: string) => {
@@ -603,6 +609,83 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {/* Onboarding API Key Modal Overlay */}
+      <AnimatePresence>
+        {showOnboardingModal && (
+          <motion.div
+            id="api-key-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-5 select-none"
+          >
+            <motion.div
+              id="api-key-modal-card"
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-4"
+            >
+              <div id="modal-header-icon" className="mx-auto w-12 h-12 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600">
+                <Key className="w-6 h-6 animate-pulse" />
+              </div>
+              
+              <div id="modal-title-area" className="text-center space-y-1.5">
+                <h3 id="modal-title" className="text-base font-bold text-gray-950">
+                  Gemini API Key 등록 후 시작하기 ⚖️
+                </h3>
+                <p id="modal-description" className="text-[11px] text-gray-500 leading-relaxed px-1">
+                  이 서비스는 사용자의 <strong>개인 Gemini API Key</strong>를 사용해 안전하게 작동합니다. 입력된 키는 오직 브라우저 내부(localStorage)에만 안전하게 로컬 저장되며, 외부 서버 등에 별도로 대화나 키 정보가 수집되지 않습니다.
+                </p>
+              </div>
+
+              <div id="modal-input-container" className="space-y-2">
+                <label id="modal-input-label" className="text-[11px] font-bold text-gray-700 block mt-1">
+                  Gemini API Key 입력
+                </label>
+                <div id="modal-input-wrapper" className="relative">
+                  <input
+                    id="modal-api-key-input"
+                    type="password"
+                    value={modalKeyInput}
+                    onChange={(e) => setModalKeyInput(e.target.value)}
+                    placeholder="AIzaSy... 형식의 API 키를 입력해 주세요"
+                    className="w-full bg-slate-50 border border-gray-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-100 text-xs rounded-xl px-3 py-2.5 outline-none font-mono tracking-wider text-gray-800"
+                  />
+                </div>
+                <p id="key-help-link" className="text-[10px] text-gray-400 leading-relaxed">
+                  * API Key가 없으시다면 <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold underline hover:text-sky-700">Google AI Studio</a>에서 1분 만에 무료로 발급받으실 수 있습니다.
+                </p>
+              </div>
+
+              <div id="modal-actions" className="flex flex-col gap-2 pt-2">
+                <button
+                  id="modal-save-button"
+                  type="button"
+                  onClick={() => {
+                    handleSaveApiKey(modalKeyInput);
+                    setShowOnboardingModal(false);
+                  }}
+                  className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-100 cursor-pointer text-center"
+                >
+                  API Key 저장하고 챗봇 시작하기
+                </button>
+                <button
+                  id="modal-skip-button"
+                  type="button"
+                  onClick={() => {
+                    setShowOnboardingModal(false);
+                  }}
+                  className="w-full py-2 text-gray-400 hover:text-gray-650 text-[11px] font-semibold transition-all cursor-pointer text-center"
+                >
+                  기본 키 사용 / 나중에 설정할래요
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
