@@ -14,7 +14,9 @@ import {
   BookOpen,
   ArrowRight,
   ShieldCheck,
-  Building
+  Building,
+  Key,
+  Settings
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Message, SuggestedQuestion } from "./types";
@@ -51,7 +53,25 @@ export default function App() {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeStep, setActiveStep] = useState<string>("");
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Load API Key on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("USER_GEMINI_API_KEY") || "";
+    setApiKey(savedKey);
+  }, []);
+
+  const handleSaveApiKey = (key: string) => {
+    const trimmed = key.trim();
+    setApiKey(trimmed);
+    if (trimmed) {
+      localStorage.setItem("USER_GEMINI_API_KEY", trimmed);
+    } else {
+      localStorage.removeItem("USER_GEMINI_API_KEY");
+    }
+  };
 
   // Automatically scroll to the bottom of the chat log
   useEffect(() => {
@@ -98,12 +118,16 @@ export default function App() {
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(apiKey ? { "x-user-api-key": apiKey } : {})
+        },
         body: JSON.stringify({ message: text, history })
       });
 
       if (!response.ok) {
-        throw new Error("서버와의 통신 도중 에러가 발생했습니다.");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "서버와 통신하는 중 문제가 발생했습니다.");
       }
 
       const data = await response.json();
@@ -124,7 +148,7 @@ export default function App() {
       const errorMessage: Message = {
         id: `msg_error_${Date.now()}`,
         role: "model",
-        text: "서버가 잠시 대기 중입니다. 계속 답변을 받지 못할 경우 아래 문구 또는 사내 채널을 활용해 주세요.\n\n조성훈 차장에게 직접 물어보살",
+        text: error.message || "서버가 잠시 대기 중입니다. 계속 답변을 받지 못할 경우 아래 문구 또는 사내 채널을 활용해 주세요.\n\n조성훈 차장에게 직접 물어보살",
         timestamp: new Date(),
         status: "error"
       };
@@ -249,19 +273,86 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-1.5">
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span className="text-xs text-gray-400 font-medium">취업규칙(완전판) 반영됨</span>
+            <button
+              onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                apiKey
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100"
+                  : "bg-sky-50 text-sky-700 border-sky-100 hover:bg-sky-100/70"
+              }`}
+              title="Gemini API Key 설정"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>{apiKey ? "API 인증됨" : "API 설정"}</span>
+            </button>
           </div>
         </div>
         
-        <div className="mt-2.5 px-2 py-1 bg-gray-50 rounded-lg flex items-center gap-2 text-[10px] text-gray-500">
-          <span className="bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded scale-90">PDF</span>
-          <span>근로기준법 및 업로드된 취업규칙(완전판) 바탕의 챗봇</span>
+        <div className="mt-2.5 px-2 py-1 bg-gray-50 rounded-lg flex items-center justify-between text-[10px] text-gray-500">
+          <div className="flex items-center gap-1.5">
+            <span className="bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded scale-90">PDF</span>
+            <span>근로기준법 및 업로드된 취업규칙(완전판) 바탕의 챗봇</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0 pr-1">
+            <span className="flex h-1.5 w-1.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] text-gray-400 font-medium">취업규칙(완전판) 반영됨</span>
+          </div>
         </div>
       </header>
+
+      {/* API Key settings panel */}
+      <AnimatePresence>
+        {showApiKeyInput && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-b border-sky-105 bg-sky-50/40 px-5 py-3.5 space-y-2 select-none"
+          >
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-sky-850 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-sky-600" /> 개인 Gemini API Key 입력 (선택)
+              </label>
+              <button 
+                type="button"
+                onClick={() => setShowApiKeyInput(false)}
+                className="text-[10px] text-gray-400 hover:text-gray-650 font-semibold"
+              >
+                닫기
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              본 웹앱 배포본에 본인의 개인 Gemini API Key를 등록해서 무료 한도를 초과하지 않고 안전하게 사용하실 수 있습니다. 입력된 API Key는 오직 브라우저 내부(localStorage)에만 안전하게 보관되며 외부 서버에 전송되거나 저장되지 않습니다.
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => handleSaveApiKey(e.target.value)}
+                placeholder="AIzaSy...형식의 API 키를 입력해 주세요"
+                className="flex-1 bg-white border border-gray-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-100 text-xs rounded-lg px-2.5 py-1.5 outline-none font-mono tracking-wider text-gray-800"
+              />
+              {apiKey && (
+                <button
+                  type="button"
+                  onClick={() => handleSaveApiKey("")}
+                  className="text-[10px] bg-red-50 text-red-650 hover:bg-red-100 hover:text-red-700 px-2 py-1 rounded-md font-bold shrink-0 transition-colors cursor-pointer"
+                >
+                  지우기
+                </button>
+              )}
+            </div>
+            {apiKey && (
+              <p className="text-[9px] text-emerald-650 font-semibold flex items-center gap-1 mt-0.5">
+                ✓ 현재 등록된 개인 API Key로 안전하게 질의가 처리됩니다.
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 2. CHAT FEED CONTAINER */}
       <main id="chat-feed" className="flex-1 overflow-y-auto px-4 py-5 space-y-4 bg-slate-50/50">

@@ -13,10 +13,10 @@ const PORT = 3000;
 app.use(express.json());
 
 // Set up Gemini Client lazily or at module load safely
-const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
+const getGeminiClient = (customApiKey?: string) => {
+  const apiKey = customApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is required');
+    throw new Error('Gemini API Key가 비어있습니다. 우측 상단의 [API 설정] 버튼을 눌러 본인의 Gemini API Key를 등록해주시거나, 관리자 .env 설정을 확인해주세요.');
   }
   return new GoogleGenAI({
     apiKey: apiKey,
@@ -36,7 +36,8 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required." });
     }
 
-    const ai = getGeminiClient();
+    const customApiKey = req.headers["x-user-api-key"] as string | undefined;
+    const ai = getGeminiClient(customApiKey);
 
     const systemInstruction = `당신은 대한민국 근로기준법 및 회사 취업규칙에 전문화된 친절하고 상세한 상담 챗봇입니다.
 사용자가 최근 업로드한 "취업규칙 (완전판)" PDF 문서 내용과 기본 "대한민국 근로기준법" 내용을 바탕으로 오직 주어진 정보에서만 답변해야 합니다.
