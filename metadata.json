@@ -1,0 +1,6 @@
+{
+  "name": "근로기준법이 궁금하면 언제든지 물어보살",
+  "description": "근로자들을 위해 근로기준법에 기반한 연차, 수당, 퇴직금, 근로시간 등의 질문에 친절하고 정확하게 답해주는 스마트 근로기준법 챗봇 서비스입니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
