@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Message, SuggestedQuestion } from "./types";
+import { GoogleGenAI } from "@google/genai";
+import { COMPANY_EMPLOYMENT_RULES, KOREAN_LABOR_STANDARDS_ACT } from "./data/labor_law_doc";
 
 const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
   {
@@ -48,6 +50,79 @@ const SUGGESTED_QUESTIONS: SuggestedQuestion[] = [
   }
 ];
 
+// Helper to call Gemini direct client-side (Bring Your Own Key mode)
+const callClientSideGemini = async (text: string, history: any[], keyToUse: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: keyToUse });
+  
+  const systemInstruction = `당신은 대한민국 근로기준법 및 회사 취업규칙에 전문화된 친절하고 상세한 상담 챗봇입니다.
+사용자가 최근 업로드한 "취업규칙 (완전판)" PDF 문서 내용과 기본 "대한민국 근로기준법" 내용을 바탕으로 오직 주어진 정보에서만 답변해야 합니다.
+
+[사용자가 업로드한 취업규칙 (완전판) PDF 문서 내용]
+${COMPANY_EMPLOYMENT_RULES}
+
+[대한민국 근로기준법 문서 내용]
+${KOREAN_LABOR_STANDARDS_ACT}
+
+[답변 규칙]
+1. 제공된 문서 내용(취업규칙 또는 근로기준법)에서 사용자의 질문에 대한 답을 명확하게 찾을 수 있는 경우:
+   - 근로자가 쉽게 이해할 수 있는 구체적이고 상냥한 존댓말 한글로 설명하세요.
+   - 답변 내용 중 또는 끝에 반드시 관련된 구체적인 조항 번호(제○조)를 명시해야 합니다.
+     이때, 명시 포맷은 다음 예시 중 하나 또는 결합하여 사용하십시오:
+     예시 1 (근로기준법 기준인 경우): "관련 조항: 근로기준법 제○조"
+     예시 2 (취업규칙 기준인 경우): "관련 조항: 근로기준법 제○조" (또는 "관련 조항: 취업규칙 제○조"를 덧붙여 주어도 좋지만 가이드에 지정된 "관련 조항: 근로기준법 제○조" 형태를 기본적으로 선호함)
+     - 여러 조항이 관련되어 있다면 모두 명확하게 나열하십시오 (예: "관련 조항: 근로기준법 제50조, 근로기준법 제53조").
+     - 없는 법적 조항이나 권리를 인위적으로 지어내거나 추측하여 답하지 마십시오.
+
+2. 제공된 문서들에서 판단하기 어려운 내용이거나 답을 "전혀 찾을 수 없거나" 정보가 불충분할 때, 또는 문서와 상관없는 내용일 때:
+   - 절대로 추측하여 답변을 꾸며내지 마십시오.
+   - 반드시 정확히 다음 글자 그대로만 답변을 출력하십시오. 글자 토시 하나 바꾸지 말고 오직 다음 문장 하나만 정교하게 단독 출력하십시오:
+     조성훈 차장에게 직접 물어보살
+   - 예컨대 "확인할 수 없습니다"와 같은 추가적인 멘트나 부연 표현을 앞뒤에 덧붙이지 마십시오.
+
+[자주 묻는 핵심 질문 가이드라인]
+사용자가 아래 질문들을 클릭하거나 물어볼 경우, 각각의 문서 근거를 들어 정확하게 설명해주시고 만약 근거 데이터가 부족하거나 모호하다면 안전하게 "조성훈 차장에게 직접 물어보살"로 귀결시키십시오:
+- "입사 3년차 연차 며칠?":
+  - 연차유급휴가 규정(근로기준법 제60조 및 취업규칙 제12조)을 참고합니다.
+  - 근로기준법 제60조 제1항에 따라 1년간 80퍼센트 이상 출근한 근로자에게는 15일의 유급휴가가 주어집니다. 3년차(계속근로기간이 2년 초과 3년 이하)에는 가산 연차 규정이 아직 발동하지 않으므로, 총 연차 발생일수는 "15일"이 됩니다.
+  - 포맷인 "관련 조항: 근로기준법 제60조"를 분명하게 포함해주세요.
+- "야근 수당 기준이 뭐예요?":
+  - 연장, 야간 및 휴일 근로 가산수당 기준은 근로기준법 제56조에 기재되어 있습니다. 연장근로(취업규칙 제9조 가이드 또는 법 제53조) 시 통상임금의 50% 가산, 야간근로(오후 10시~다음 날 오전 6시 사이)는 통상임금의 50% 가산 등이 적용됩니다.
+  - 포맷인 "관련 조항: 근로기준법 제56조"를 분명하게 포함해주세요.
+- "퇴직금 계산법 알려주세요":
+  - 근로기준법 제34조(퇴직급여 제도) 및 취업규칙 제33조에 따릅니다.
+  - 계속근로 수간 1년에 대하여 30일분 이상의 평균임금을 지급하는 것이 법정 퇴직금 기준입니다.
+  - 포맷인 "관련 조항: 근로기준법 제34조"를 분명하게 포함해주세요.
+- "주 52시간 넘으면 어떻게 되나요?":
+  - 법정근로시간 주 40시간(근로기준법 제50조 및 취업규칙 제8조) 및 합의에 의한 연장한도 주 12시간(근로기준법 제53조 및 취업규칙 제9조)을 더해 최대 주 52시간제입니다. 이를 위반할 경우 근로기준법 제110조 제1호에 따라 2년 이하의 징역 또는 2천만원 이하의 벌금에 처해질 수 있습니다.
+  - 포맷인 "관련 조항: 근로기준법 제50조, 근로기준법 제53조, 근로기준법 제110조"를 명확히 포함해주세요.
+  `;
+
+  const contents: any[] = [];
+  if (history && Array.isArray(history)) {
+    history.forEach((turn: any) => {
+      contents.push({
+        role: turn.role,
+        parts: [{ text: turn.text }]
+      });
+    });
+  }
+  contents.push({
+    role: "user",
+    parts: [{ text }]
+  });
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: contents,
+    config: {
+      systemInstruction: systemInstruction,
+      temperature: 0.1,
+    }
+  });
+
+  return response.text || "조성훈 차장에게 직접 물어보살";
+};
+
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -57,6 +132,7 @@ export default function App() {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [modalKeyInput, setModalKeyInput] = useState("");
+  const [modalValidationError, setModalValidationError] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load API Key on mount
@@ -68,6 +144,31 @@ export default function App() {
       setShowOnboardingModal(true);
     }
   }, []);
+
+  const handleSaveOnboardingKey = () => {
+    let keyToValidate = modalKeyInput.trim();
+    if (keyToValidate.includes("=")) {
+      const parts = keyToValidate.split("=");
+      keyToValidate = parts[parts.length - 1].trim();
+    }
+    if ((keyToValidate.startsWith('"') && keyToValidate.endsWith('"')) || 
+        (keyToValidate.startsWith("'") && keyToValidate.endsWith("'"))) {
+      keyToValidate = keyToValidate.slice(1, -1).trim();
+    }
+    
+    if (!keyToValidate) {
+      setModalValidationError("주어지고 규정된 API Key를 공란 없이 입력하십시오. (API Key is required.)");
+      return;
+    }
+    if (keyToValidate.length < 15) {
+      setModalValidationError("유효하지 않은 짧은 입력입니다. 올바른 API Key를 정확히 입력해 주십시오. (Please enter a valid API key.)");
+      return;
+    }
+    
+    setModalValidationError("");
+    handleSaveApiKey(modalKeyInput);
+    setShowOnboardingModal(false);
+  };
 
   const handleSaveApiKey = (key: string) => {
     let cleaned = key.trim();
@@ -135,39 +236,78 @@ export default function App() {
         text: msg.text
       }));
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(apiKey ? { "x-user-api-key": apiKey } : {})
-        },
-        body: JSON.stringify({ message: text, history })
-      });
+      let responseText = "";
 
-      if (!response.ok) {
-        let serverError = "";
+      // IF client has entered an API key, we call Gemini DIRECTLY on the client-side!
+      // This is highly robust, works perfectly on Vercel/GitHub pages without backend proxies,
+      // and completely resolves the "Cannot communicate with server" error seen in Vercel.
+      if (apiKey) {
         try {
-          const errorData = await response.json().catch(() => ({}));
-          serverError = errorData.error;
-        } catch (e) {
-          // If response is not JSON, try reading as raw text
-          try {
-            const rawText = await response.text();
-            if (rawText && rawText.length < 200) {
-              serverError = rawText;
-            }
-          } catch (textErr) {}
+          responseText = await callClientSideGemini(text, history, apiKey);
+        } catch (clientError: any) {
+          console.error("Client side Gemini error:", clientError);
+          let errMsg = clientError.message || String(clientError);
+          
+          if (errMsg.includes("API_KEY_INVALID") || 
+              errMsg.includes("API key not valid") || 
+              errMsg.includes("invalid API key") ||
+              errMsg.includes("API key")) {
+            throw new Error("입력하신 Gemini API Key가 올바르지 않거나 활성화되지 않았습니다. 우측 상단 [API 설정] 단추를 클릭해 유효한 API Key를 복사해 올바르게 입력해 주십시오.");
+          } else if (errMsg.toLowerCase().includes("quota") || 
+                     errMsg.toLowerCase().includes("limit") || 
+                     errMsg.includes("429")) {
+            throw new Error("Gemini API 호출 한도를 초과했습니다. 개인 API 키의 사용 한도나 대시보드를 확인해 주십시오.");
+          } else if (errMsg.toLowerCase().includes("blocked") || 
+                     errMsg.toLowerCase().includes("safety")) {
+            throw new Error("안전 규정 위반 또는 민감한 키워드로 인해 답변 생성이 제한되었습니다.");
+          } else {
+            throw new Error(`개인 API Key 연결 오류: ${errMsg}`);
+          }
         }
-        throw new Error(serverError || "서버와 통신하는 중 문제가 발생했습니다.");
+      } else {
+        // Fallback to Express backend if no client-side API Key is registered (will use server env key if set)
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message: text, history })
+        });
+
+        if (!response.ok) {
+          let serverError = "";
+          try {
+            const errorData = await response.json().catch(() => ({}));
+            serverError = errorData.error;
+          } catch (e) {
+            try {
+              const rawText = await response.text();
+              if (rawText && rawText.length < 200) {
+                serverError = rawText;
+              }
+            } catch (textErr) {}
+          }
+          
+          // If server is 404 (indicating static client hosting on Vercel without back-end proxy),
+          // pop up the API Key onboarding modal to help the user directly configure their key!
+          if (response.status === 404) {
+            setShowOnboardingModal(true);
+            throw new Error("서버와의 통신에 실패했습니다(404 Not Found). 만약 Vercel이나 정적 호스팅 사이트에서 서비스 중이시라면, 우측 상단 [API 설정] 버튼을 클릭해 개인 Gemini API Key를 등록한 후 시작해주셔야 합니다.");
+          }
+          
+          throw new Error(serverError || "서버와 통신하는 중 문제가 발생했습니다.");
+        }
+
+        const data = await response.json();
+        responseText = data.text;
       }
 
-      const data = await response.json();
       clearInterval(stepInterval);
 
       const botMessage: Message = {
         id: `msg_bot_${Date.now()}`,
         role: "model",
-        text: data.text || "조성훈 차장에게 직접 물어보살",
+        text: responseText || "조성훈 차장에게 직접 물어보살",
         timestamp: new Date(),
       };
 
@@ -618,69 +758,76 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-5 select-none"
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-5 select-none"
           >
             <motion.div
               id="api-key-modal-card"
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 space-y-4"
+              className="w-full max-w-sm bg-white rounded-3xl shadow-xl border border-gray-150 p-6 space-y-5"
             >
               <div id="modal-header-icon" className="mx-auto w-12 h-12 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600">
                 <Key className="w-6 h-6 animate-pulse" />
               </div>
               
-              <div id="modal-title-area" className="text-center space-y-1.5">
-                <h3 id="modal-title" className="text-base font-bold text-gray-950">
-                  Gemini API Key 등록 후 시작하기 ⚖️
+              <div id="modal-title-area" className="text-center space-y-2">
+                <h3 id="modal-title" className="text-lg font-extrabold text-gray-950 tracking-tight">
+                  Enter Your API Key
                 </h3>
-                <p id="modal-description" className="text-[11px] text-gray-500 leading-relaxed px-1">
-                  이 서비스는 사용자의 <strong>개인 Gemini API Key</strong>를 사용해 안전하게 작동합니다. 입력된 키는 오직 브라우저 내부(localStorage)에만 안전하게 로컬 저장되며, 외부 서버 등에 별도로 대화나 키 정보가 수집되지 않습니다.
+                <p id="modal-description" className="text-xs text-gray-500 leading-relaxed px-1">
+                  This app requires your personal API key to function. Your key will be used only for your own requests.
                 </p>
+                <div className="border-t border-gray-100 my-2 pt-2 text-[10.5px] text-gray-400 italic">
+                  * 본 서비스는 사용자의 <strong>개인 Gemini API Key</strong>를 통해 작동하며, 입력정보 및 API Key는 브라우저 내부(localStorage)로만 안전하게 로컬 저장됩니다.
+                </div>
               </div>
 
               <div id="modal-input-container" className="space-y-2">
-                <label id="modal-input-label" className="text-[11px] font-bold text-gray-700 block mt-1">
-                  Gemini API Key 입력
+                <label id="modal-input-label" className="text-[11px] font-bold text-gray-750 block">
+                  Gemini API Key
                 </label>
                 <div id="modal-input-wrapper" className="relative">
                   <input
                     id="modal-api-key-input"
                     type="password"
                     value={modalKeyInput}
-                    onChange={(e) => setModalKeyInput(e.target.value)}
-                    placeholder="AIzaSy... 형식의 API 키를 입력해 주세요"
-                    className="w-full bg-slate-50 border border-gray-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-100 text-xs rounded-xl px-3 py-2.5 outline-none font-mono tracking-wider text-gray-800"
+                    onChange={(e) => {
+                      setModalKeyInput(e.target.value);
+                      if (modalValidationError) setModalValidationError("");
+                    }}
+                    placeholder="AIzaSy... 형식의 API Key 입력"
+                    className="w-full bg-slate-50 border border-gray-200 focus:border-sky-500 focus:ring-1 focus:ring-sky-100 text-xs rounded-xl px-3 py-2.5 outline-none font-mono tracking-wider text-gray-800"
                   />
                 </div>
-                <p id="key-help-link" className="text-[10px] text-gray-400 leading-relaxed">
-                  * API Key가 없으시다면 <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold underline hover:text-sky-700">Google AI Studio</a>에서 1분 만에 무료로 발급받으실 수 있습니다.
+
+                {modalValidationError && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-lg p-2 mt-1.5"
+                  >
+                    ⚠️ {modalValidationError}
+                  </motion.p>
+                )}
+
+                <p id="key-help-link" className="text-[10.5px] text-gray-400 leading-normal pt-1">
+                  * 아직 API 키가 없으시다면, <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-sky-600 font-bold underline hover:text-sky-700">Google AI Studio</a>에서 빠르고 수동 발급할 수 있는 인증 키를 1분 이내로 생성해 입력하여 주십시오.
                 </p>
               </div>
 
-              <div id="modal-actions" className="flex flex-col gap-2 pt-2">
+              <div id="modal-actions" className="flex flex-col gap-2 pt-1">
                 <button
                   id="modal-save-button"
                   type="button"
-                  onClick={() => {
-                    handleSaveApiKey(modalKeyInput);
-                    setShowOnboardingModal(false);
-                  }}
-                  className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-100 cursor-pointer text-center"
+                  onClick={handleSaveOnboardingKey}
+                  className="w-full py-3 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-100 cursor-pointer text-center"
                 >
-                  API Key 저장하고 챗봇 시작하기
+                  Save API Key
                 </button>
-                <button
-                  id="modal-skip-button"
-                  type="button"
-                  onClick={() => {
-                    setShowOnboardingModal(false);
-                  }}
-                  className="w-full py-2 text-gray-400 hover:text-gray-650 text-[11px] font-semibold transition-all cursor-pointer text-center"
-                >
-                  기본 키 사용 / 나중에 설정할래요
-                </button>
+                <p className="text-[9.5px] text-gray-400 text-center select-none pt-1">
+                  ※ API Key는 언제든 상단 [API 설정] 메뉴를 사용하여 손쉽게 수정 및 보완하실 수 있습니다.
+                </p>
               </div>
             </motion.div>
           </motion.div>
